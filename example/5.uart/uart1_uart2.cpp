@@ -26,14 +26,19 @@ void uart1_rx_event()
     uint16_t c;
     c = uart1.read();
     inputString[i]=c;
+	inputString[i+1] = '\0';
     if (c == '\n')
     {
-        inputString[i+1] = '\0';
         uart2.printf(inputString);
         i=0;
-    }else{
-        i++;
-    }
+    }else if(strncmp(inputString,"+++",3) == 0)
+	{
+        uart2.printf(inputString);
+        i=0;
+    }else
+	{
+		i++;
+	}
 }
 void setup()
 {
@@ -52,7 +57,3 @@ int main(void)
         ;
     }
 }
-
-
-
-
