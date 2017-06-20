@@ -1,0 +1,228 @@
+/**
+  ******************************************************************************
+  * @file    main.c
+  * @author  www.bigiot.net
+  * @version V0.1
+  * @date    2017-6-9
+  * @brief   STM32F103C8T6_ESP01_SUIT
+  ******************************************************************************
+  * @attention
+  *
+  * THE PRESENT FIRMWARE WHICH IS FOR GUIDANCE ONLY AIMS AT PROVIDING CUSTOMERS
+  * WITH CODING INFORMATION REGARDING THEIR PRODUCTS IN ORDER FOR THEM TO SAVE
+  * TIME. AS A RESULT, STMICROELECTRONICS SHALL NOT BE HELD LIABLE FOR ANY
+  * DIRECT, INDIRECT OR CONSEQUENTIAL DAMAGES WITH RESPECT TO ANY CLAIMS ARISING
+  * FROM THE CONTENT OF SUCH FIRMWARE AND/OR THE USE MADE BY CUSTOMERS OF THE
+  * CODING INFORMATION CONTAINED HEREIN IN CONNECTION WITH THEIR PRODUCTS.
+  *
+  * <h2><center>&copy; COPYRIGHT 2011 STMicroelectronics</center></h2>
+  ******************************************************************************
+  */
+
+/* Includes ------------------------------------------------------------------*/
+#include <stdio.h>
+#include "stm32f10x.h"
+#include "stm32f10x_it.h"
+#include "ADC.h"
+#include "LED.h"
+#include "usart1.h"
+#include "cJSON.h"
+#include "millis.h"
+
+uint8_t aRxBuffer[1024] = {0x00};
+
+unsigned long lastCheckInTime = 0; //????????
+unsigned long lastCheckStatusTime = 0; //??????????
+unsigned long lastUpdateTime = 0; //??????????
+const unsigned long postingInterval = 40000; // ??40?????????
+const unsigned long statusInterval = 100000; // ??100?????????
+const unsigned long updateInterval = 5000; // ??5?????????
+unsigned int stringComplete = 0;
+
+char *DEVICEID = "xxxxx";
+char *APIKEY = "xxxxx";
+char *INPUTID = "xxxxx";
+
+void delay_ms(u16 time)
+{
+    u16 i = 0;
+    while(time--)
+    {
+        i = 12000;
+        while(i--);
+    }
+}
+void checkin(void)
+{
+    /*
+    cJSON *root;
+    root = cJSON_CreateObject();
+    if(!root) {
+        printf("get root faild !\n");
+        return;
+    } else
+    {
+        cJSON_AddStringToObject(root, "M", "checkin");
+        cJSON_AddStringToObject(root, "ID", DEVICEID);
+        cJSON_AddStringToObject(root, "K", APIKEY);
+        {
+            char *s = cJSON_PrintUnformatted(root);
+            if(s) {
+                printf("%s\n", s);
+                free(s);
+            }
+        }
+        if(root)
+            cJSON_Delete(root);
+    }
+    return;*/
+    printf("{\"M\":\"checkin\",\"ID\":\"%s\",\"K\":\"%s\"}\n", DEVICEID, APIKEY);
+}
+
+void checkout(void)
+{
+    printf("{\"M\":\"checkout\",\"ID\":\"%s\",\"K\":\"%s\"}\n", DEVICEID, APIKEY);
+}
+
+void check_status(void)
+{
+    printf("{\"M\":\"status\"}\n");
+}
+
+void say(char *toID, char *content)
+{
+    printf("{\"M\":\"say\",\"ID\":\"%s\",\"C\":\"%s\"}\n", toID, content);
+}
+
+void update1(char *did, char *inputid, float value) {
+    printf("{\"M\":\"update\",\"ID\":\"%s\",\"V\":{\"%s\":\"%f\"}}\n", did, inputid, value);
+}
+
+    int processMessage(char *msg){
+    cJSON *jsonObj = cJSON_Parse(msg);
+    if(!jsonObj)
+    {
+        uart1.printf("json string wrong!");
+        return 0;
+    }
+    cJSON *method = cJSON_GetObjectItem(jsonObj, "M");
+    char *m = method->valuestring;
+    if(strncmp(m,"b",1) == 0 || strncmp(m,"WELCOME",7) == 0)
+    {
+        uart1.printf("sending checkout...\r\n");
+        uart2.print(checkout);
+        //delay_ms(500);
+        uart1.printf("sending checkin...\r\n");
+        uart2.print(checkin);
+    }
+    if(strncmp(m,"checkinok",9) == 0)
+    {
+        checkinok=true;
+    }
+    if(strncmp(m,"connected",9) == 0)
+    {
+        checkinok=false;
+        uart1.printf("sending checkout...\r\n");
+        uart2.print(checkout);
+        //delay_ms(500);
+        uart1.printf("sending checkin...\r\n");
+        uart2.print(checkin);
+    }
+    if(strncmp(m,"checked",7) == 0)
+    {
+        checkinok=true;
+    }
+    if(strncmp(m,"login",5) == 0)
+    {
+        char *from_id = cJSON_GetObjectItem(jsonObj, "ID")->valuestring;
+        if(strncmp(from_id,"G",1) == 0)
+        {
+            uart1.printf("saying...");
+            char new_content[] = "Dear friend, welcome to BIGIOT !";
+            say(from_id,new_content);
+        }
+    }
+    if(strncmp(m,"say",3) == 0 && millis() - last_say_time > 10)
+    {
+        last_say_time = millis();
+        char *content = cJSON_GetObjectItem(jsonObj, "C")->valuestring;
+        char *from_id = cJSON_GetObjectItem(jsonObj, "ID")->valuestring;
+        if(strncmp(content,"play",4) == 0)
+        {
+            //do something here....
+            uart1.printf("saying...");
+            char new_content[] = "played";
+            say(from_id,new_content);
+        }
+        else if(strncmp(content,"stop",4) == 0)
+        {
+            //do something here....
+            uart1.printf("saying...");
+            char new_content[] = "stoped";
+            say(from_id,new_content);
+        }
+    }
+    if(jsonObj)cJSON_Delete(jsonObj);
+    return 1;
+}
+    
+
+void setup(void)
+{
+    LED_Init();
+    USART1_Config();
+    Adc_Init();
+    MILLIS_Init();
+}
+int main(void)
+{
+    unsigned char i = 0;
+    unsigned int j = 0;
+    setup();
+    while (1)
+    {
+        delay_ms(100);
+        if (millis() - lastCheckInTime > postingInterval || lastCheckInTime == 0) {
+            checkin();
+            lastCheckInTime = millis();
+        }
+        if (millis() - lastCheckStatusTime > statusInterval) {
+            check_status();
+            lastCheckStatusTime = millis();
+        }
+        if (millis() - lastUpdateTime > updateInterval) {
+            float val;
+            int sensorValue = ADC_GetConversionValue(ADC1);
+            val = sensorValue * (4.76 / 1023.0 * 100);
+            update1(DEVICEID, INPUTID, val);
+            lastUpdateTime = millis();
+        }
+
+            /* Store the received byte in RxBuffer */
+            //aRxBuffer[i++] = USART_ReceiveData(USART1);
+
+        //printf("buffer:%s\r\n", aRxBuffer);
+
+        while(UART1GetByte(&i))
+        {
+            if(strncmp(i,"\n",1) == 0)
+            {
+                stringComplete = 1;
+            }
+            else
+            {
+                aRxBuffer[j++] = i;
+            }
+            
+        }
+        if (stringComplete)
+        {
+            processMsge(aRxBuffer);
+        }
+
+        //printf("v:%d\r\n", ADC_GetConversionValue(ADC1));
+        //printf("millis:%lo\r\n", millis());
+        //delay_ms(1000);
+    }
+}
+
