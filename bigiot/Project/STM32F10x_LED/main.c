@@ -27,8 +27,9 @@ unsigned long lastSayTime = 0;
 const unsigned long postingInterval = 40000; 
 const unsigned long statusInterval = 100000; 
 
-char *DEVICEID = "453";
-char *APIKEY = "5fe597a2b";
+/*以下两个变量必须修改为自己的设备ID及APIKEY，在贝壳物联用户中心添加设备即可获得*/
+char *DEVICEID = "xxx";
+char *APIKEY = "xxxxxxxxx";
 
 /*延时函数*/
 void delay_ms(u16 time)
