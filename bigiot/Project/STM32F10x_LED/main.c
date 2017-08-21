@@ -85,13 +85,13 @@ int processMessage(char *msg) {
         //防止设备在线状态未消除，先登出
         checkout();
         //防止连续发送指令过快
-        delay_ms(50);
+        delay_ms(500);
         checkin();
     }
     if(strncmp(m, "connected", 9) == 0)
     {
         checkout();
-        delay_ms(50);
+        delay_ms(500);
         checkin();
     }
     //有设备或用户登录，发送欢迎信息
