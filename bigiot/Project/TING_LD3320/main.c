@@ -1,0 +1,246 @@
+/**
+  ******************************************************************************
+  * @file    main.c
+  * @author  www.bigiot.net
+  * @version V0.1
+  * @date    2017-6-9
+  * @brief   STM32F103C8T6_ESP01_LED，设备登录为不加密模式。
+  ******************************************************************************
+  */
+
+/* Includes ------------------------------------------------------------------*/
+#include <string.h>
+#include "main.h"
+#include "delay.h"
+#include "usart1.h"
+#include "usart2.h"
+#include "sd.h"
+#include "ff.h"
+#include "ld3320.h"
+#include "mp3.h"
+#include "led.h"
+#include "asr.h"
+#include "cJSON.h"
+#include "millis.h"
+#include "bigiot.h"
+
+FATFS fs[_VOLUMES];
+
+unsigned long lastCheckStatusTime = 0;
+unsigned long lastCheckOutTime = 0;
+unsigned long lastSayTime = 0;
+const unsigned long postingInterval = 40000;
+const unsigned long statusInterval = 60000;
+bigiot_state BGT_STA = OFF_LINE;
+/*以下两个变量必须修改为自己的设备ID及APIKEY，在贝壳物联用户中心添加设备即可获得*/
+char *DEVICEID = "458";
+char *APIKEY = "9cb787949";
+
+/*用CJSON处理接收到的信息*/
+int processMessage(char *msg) {
+    cJSON *jsonObj = cJSON_Parse(msg);
+    cJSON *method;
+    char *m;
+    //json字符串解析失败，直接退出
+    printf("网络接收：%s", msg);
+    if(!jsonObj)
+    {
+        //uart1.USART2_printf("json string wrong!");
+        return 0;
+    }
+    method = cJSON_GetObjectItem(jsonObj, "M");
+    m = method->valuestring;
+    if(strncmp(m, "WELCOME", 7) == 0)
+    {
+        BGT_STA = CONNECTED;
+        //防止设备在线状态未消除，先登出
+        checkout(DEVICEID, APIKEY);
+        lastCheckOutTime = millis();
+    }
+    if(strncmp(m, "connected", 9) == 0)
+    {
+        BGT_STA = CONNECTED;
+        checkin(DEVICEID, APIKEY);
+    }
+    //{"M":"checkout","IP":"xx1","T":"xx2"}\n
+    if(strncmp(m, "checkout", 8) == 0)
+    {
+        BGT_STA = FORCED_OFF_LINE;
+    }
+    //{"M":"checkinok","ID":"xx1","NAME":"xx2","T":"xx3"}\n
+    if(strncmp(m, "checkinok", 9) == 0)
+    {
+        BGT_STA = CHECKED;
+    }
+    if(strncmp(m, "checked", 7) == 0)
+    {
+        BGT_STA = CHECKED;
+    }
+    //有设备或用户登录，发送欢迎信息
+    if(strncmp(m, "login", 5) == 0)
+    {
+        char *from_id = cJSON_GetObjectItem(jsonObj, "ID")->valuestring;
+        char new_content[] = "Dear friend, welcome to BIGIOT !";
+        say(from_id, new_content);
+    }
+    //收到say指令，执行相应动作，并进行相应回复
+    if(strncmp(m, "say", 3) == 0 && millis() - lastSayTime > 10)
+    {
+        char *content = cJSON_GetObjectItem(jsonObj, "C")->valuestring;
+        char *from_id = cJSON_GetObjectItem(jsonObj, "ID")->valuestring;
+        lastSayTime = millis();
+        if(strncmp(content, "play", 4) == 0)
+        {
+            char new_content[] = "led played";
+            //do something here....
+            LED_D3 = 0;
+            say(from_id, new_content);
+        }
+        else if(strncmp(content, "stop", 4) == 0)
+        {
+            char new_content[] = "led stoped";
+            //do something here....
+            LED_D3 = 1;
+            say(from_id, new_content);
+        }
+    }
+    if(jsonObj)cJSON_Delete(jsonObj);
+    return 1;
+}
+
+
+void setup(void)
+{
+    delay_init();//延时初始化
+    USART1_init(115200);
+    USART2_init(115200);
+    LED_Init(); 	                   //LED初始化
+    while(SD_Init())                   //SD卡初始化
+    {
+        printf("SD卡初始化错误\r\n");  //串口提示SD卡初始化错误
+        delay_ms(2000);                //延时2s
+    }
+    f_mount(&fs[0], "0:", 1); 	     //挂载SD卡
+    LD3320_Init();	                   //初始化LD3320
+    MILLIS_Init();
+}
+
+u8 read_print(char *path)
+{
+    u8 res;
+    u32 size;
+    char buf[100];
+    UINT br;
+	FIL file;
+	res=f_open (&file,"0:/message.txt", FA_OPEN_ALWAYS|FA_READ|FA_WRITE);			//打开文件,不存在则新建.
+	res=f_lseek(&file,f_size(&file)); 												//移动读写指针(移动到文件的结尾添加数据)
+	f_write (&file, "我自己移植的FATFS文件系统,现在正在做最后的读写测试.\r\n", sizeof("我自己移植的FATFS文件系统,现在正在做最后的读写测试.\r\n")-1, &br);	//写入数据	
+	f_close(&file);		//关闭文件
+}
+
+int main(void)
+{
+    u8 nAsrRes = 0;
+    u16 len;
+    setup();
+    
+    printf(" 口令1：重启系统\r\n ");
+    printf(" 口令2：讲个笑话\r\n ");
+    printf(" 口令3：打开\r\n ");
+    printf(" 口令4：关闭\r\n ");
+    nAsrStatus = LD_ASR_NONE;		     //初始状态：没有在作ASR
+    PlayDemoSound_mp3("系统准备.mp3");   //播放文件
+    while(bMp3Play == 0);                //语音数据发送完毕
+    delay_ms(5000);
+
+    while (1)
+    {
+        if ( BGT_STA == CONNECTED && lastCheckOutTime != 0 && millis() - lastCheckOutTime > 200) {
+            checkin(DEVICEID, APIKEY);
+            lastCheckOutTime = 0;
+        }
+        if (millis() - lastCheckStatusTime > statusInterval || (lastCheckStatusTime == 0 && millis() > 5000)) {
+            check_status();
+            lastCheckStatusTime = millis();
+        }
+
+        if(USART2_RX_STA & 0x8000)
+        {
+            len=USART2_RX_STA&0x3fff;                       //得到此次接收到的数据长度
+            printf("usart2 收到长度：%d\r\n",len);
+            USART2_RX_BUF[len]='\0';
+            //printf("usart2 收到数据：%s\r\n",USART2_RX_BUF);
+            processMessage((char*)USART2_RX_BUF);
+            USART2_RX_STA = 0;
+        }
+        switch(nAsrStatus)
+        {
+        case LD_ASR_RUNING:
+            break;
+
+        case LD_ASR_ERROR:
+            break;
+
+        case LD_ASR_NONE:
+            nAsrStatus = LD_ASR_RUNING;            //启动一次ASR识别流程：ASR初始化，ASR添加关键词语，启动ASR运算
+            if (RunASR() == 0)
+            {
+                printf("ASR_ERROR\r\n");
+                nAsrStatus = LD_ASR_ERROR;
+            }
+            break;
+
+        case LD_ASR_FOUNDOK:
+            nAsrRes = LD_ReadReg(0xc5);	            //一次ASR识别成功结束，取ASR识别结果
+            switch(nAsrRes)
+            {
+            case CODE_CQXT:
+                printf("接收到口令：重启系统\r\n");
+                PlayDemoSound_mp3("重启.mp3");   //播放文件
+                while(bMp3Play == 0);            //语音数据发送完毕
+                delay_ms(3000); 				 //本段语音3s，延时4S，确保语音播放完毕
+                NVIC_SystemReset();              //重启
+                break;
+            case CODE_JGXH:
+                printf("接收到口令：讲个笑话\r\n");
+                PlayDemoSound_mp3("笑话.mp3");   //播放文件
+                while(bMp3Play == 0);            //语音数据发送完毕
+                delay_ms(12000); 				 //本段语音10s，延时12S，确保语音播放完毕
+                break;
+            case CODE_DK:
+                printf("接收到口令：打开\r\n");
+                PlayDemoSound_mp3("打开.mp3");       //播放文件
+                while(bMp3Play == 0);                //语音数据发送完毕
+                delay_ms(5000);                      //本段语音4s，延时5S，确保语音播放完毕
+                delay_ms(1000);                      //语音中提示是1s延时后，打开LED
+                LED_D3 = 0;
+                LED_D4 = 0;
+                break;
+            case CODE_GB:
+                printf("接收到口令：关闭\r\n");
+                PlayDemoSound_mp3("关闭.mp3");       //播放文件
+                while(bMp3Play == 0);                //语音数据发送完毕
+                delay_ms(5000);                      //本段语音4s，延时5S，确保语音播放完毕
+                delay_ms(1000);                      //语音中提示是1s延时后，关闭LED
+                LED_D3 = 1;
+                LED_D4 = 1;
+                break;
+            default:
+                printf("不在口令集之内\r\n");
+                break;
+            }
+            nAsrStatus = LD_ASR_NONE;
+            break;
+
+        case LD_ASR_FOUNDZERO:
+            printf("未知口令\r\n");
+            nAsrStatus = LD_ASR_NONE;
+            break;
+
+        default:
+            nAsrStatus = LD_ASR_NONE;
+            break;
+        }
+    }
+}
+
