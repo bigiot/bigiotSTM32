@@ -1,0 +1,6 @@
+[
+	{"N":1,"C":"xiao bei xiao bei"},
+	{"N":1,"C":"bei ke wu lian"},
+	{"N":2,"C":"xiao du xiao du"},
+	{"N":2,"C":"bei ke ke ke"}
+]

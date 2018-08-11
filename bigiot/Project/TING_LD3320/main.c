@@ -9,6 +9,7 @@
   */
 
 /* Includes ------------------------------------------------------------------*/
+#include <stdio.h>
 #include <string.h>
 #include "main.h"
 #include "delay.h"
@@ -24,14 +25,21 @@
 #include "millis.h"
 #include "bigiot.h"
 
-FATFS fs[_VOLUMES];
+//FATFS fs[_VOLUMES];
+
+FATFS fs;
+//FIL config_file2;
+
+//char buf[2048];
 
 unsigned long lastCheckStatusTime = 0;
 unsigned long lastCheckOutTime = 0;
 unsigned long lastSayTime = 0;
+unsigned long lastWakeTime = 0;
 const unsigned long postingInterval = 40000;
 const unsigned long statusInterval = 60000;
 bigiot_state BGT_STA = OFF_LINE;
+unsigned int waked = 0;
 /*以下两个变量必须修改为自己的设备ID及APIKEY，在贝壳物联用户中心添加设备即可获得*/
 char *DEVICEID = "458";
 char *APIKEY = "9cb787949";
@@ -120,38 +128,107 @@ void setup(void)
         printf("SD卡初始化错误\r\n");  //串口提示SD卡初始化错误
         delay_ms(2000);                //延时2s
     }
-    f_mount(&fs[0], "0:", 1); 	     //挂载SD卡
+    f_mount(&fs, "0:", 1); 	     //挂载SD卡
     LD3320_Init();	                   //初始化LD3320
     MILLIS_Init();
 }
 
-u8 read_print(char *path)
+u8 write_file(char *path)
 {
     u8 res;
-    u32 size;
-    char buf[100];
     UINT br;
-	FIL file;
-	res=f_open (&file,"0:/message.txt", FA_OPEN_ALWAYS|FA_READ|FA_WRITE);			//打开文件,不存在则新建.
-	res=f_lseek(&file,f_size(&file)); 												//移动读写指针(移动到文件的结尾添加数据)
-	f_write (&file, "我自己移植的FATFS文件系统,现在正在做最后的读写测试.\r\n", sizeof("我自己移植的FATFS文件系统,现在正在做最后的读写测试.\r\n")-1, &br);	//写入数据	
-	f_close(&file);		//关闭文件
+    FIL file;
+    char wakeup[] = "[{\"N\":1,\"C\":\"xiao bei xiao bei\"},{\"N\":2,\"C\":\"bei ke wu lian\"},{\"N\":3,\"C\":\"xiao zhu xiao zhu\"},{\"N\":4,\"C\":\"bei ke kei kei\"}]";
+    res = f_open (&file, path, FA_OPEN_ALWAYS | FA_WRITE);			//打开文件,不存在则新建.
+    if(res != FR_OK)
+    {
+        printf("打开失败:%s\r\n", path);                           //串口显示信息
+        f_close(&file);                                    //关闭文件
+        return res;
+    }
+    //res=f_lseek(&file,f_size(&file)); 										    //移动读写指针(移动到文件的结尾添加数据)
+    res = f_lseek(&file, 0);                                                         //移动读写指针(移动到文件的开头)
+    f_write (&file, wakeup, sizeof(wakeup) - 1, &br);	//写入数据
+    f_close(&file);		//关闭文件
+    printf("write file OK!%d\r\n", res);
+    return res;
+}
+u8 write_file2(char *path)
+{
+    u8 res;
+    UINT br;
+    FIL file;
+    char wakeup[] = "{\"C0\":{\"ID\":\"6589\",\"K\":\"658bb0ee3\",\"BR\":9600,\"CI\":10,\"CC\":1,\"SPK\":1},\"C1\":{\"M\":\"WAKE\",\"W\":\"wake\"},\"C2\":{\"M\":\"LED\",\"V\":1,\"W\":\"ledon\"}}";
+    res = f_open (&file, path, FA_OPEN_ALWAYS | FA_WRITE);			//打开文件,不存在则新建.
+    if(res != FR_OK)
+    {
+        printf("打开失败:%s\r\n", path);                           //串口显示信息
+        f_close(&file);                                    //关闭文件
+        return res;
+    }
+    //res=f_lseek(&file,f_size(&file)); 										    //移动读写指针(移动到文件的结尾添加数据)
+    res = f_lseek(&file, 0);                                                         //移动读写指针(移动到文件的开头)
+    f_write (&file, wakeup, sizeof(wakeup) - 1, &br);	//写入数据
+    f_close(&file);		//关闭文件
+    printf("write file2 OK!%d\r\n", res);
+    return res;
 }
 
+void voice_command(u8 num,char * path)
+{
+    FIL file;
+    UINT br;
+    u8 res;
+    char config_buf[2048];
+    cJSON *root;
+    cJSON *C_n;
+    cJSON *C_n_m;
+    char *c_n_str;
+    res=f_open(&file,path,FA_OPEN_EXISTING | FA_READ );    //打开一个mp3文件
+	if(res != FR_OK)                                           //如果不存在
+	{
+		printf("2该文件不存在:%d\r\n",res);                            //串口显示信息
+		f_close(&file);                                    //关闭文件
+		return;		                                       //返回错误值
+        //TODO...
+	}
+    f_read (&file, config_buf,f_size(&file),&br);			//读取文件到buf
+    f_close(&file);	
+    printf("file:%s\r\n",config_buf);
+    root = cJSON_Parse(config_buf);
+    //printf("%s\r\n", cJSON_Print(root));
+    sprintf(c_n_str,"%s%d","C",num);
+    printf("c_n_str:%s\r\n",c_n_str);
+    C_n = cJSON_GetObjectItem(root, "C1");
+    C_n_m = cJSON_GetObjectItem(C_n, "M");
+    printf("c_n_m:%s\r\n",C_n_m->valuestring);
+    if(strncmp(C_n_m->valuestring, "WAKE", 4) == 0)
+    {
+        printf("waked\r\n");
+    }
+    if(strncmp(C_n_m->valuestring, "LED", 3) == 0)
+    {
+        printf("LEDed\r\n");
+    }
+    if(root)cJSON_Delete(root);
+    return;
+}
 int main(void)
 {
     u8 nAsrRes = 0;
     u16 len;
     setup();
-    
+    write_file("asr.txt");
+    write_file2("config.txt");
+    //read_wakeup_file("0:/message.txt");
     printf(" 口令1：重启系统\r\n ");
     printf(" 口令2：讲个笑话\r\n ");
     printf(" 口令3：打开\r\n ");
     printf(" 口令4：关闭\r\n ");
     nAsrStatus = LD_ASR_NONE;		     //初始状态：没有在作ASR
     PlayDemoSound_mp3("系统准备.mp3");   //播放文件
-    while(bMp3Play == 0);                //语音数据发送完毕
-    delay_ms(5000);
+    //while(bMp3Play == 0);                //语音数据发送完毕
+    //delay_ms(5000);
 
     while (1)
     {
@@ -166,12 +243,20 @@ int main(void)
 
         if(USART2_RX_STA & 0x8000)
         {
-            len=USART2_RX_STA&0x3fff;                       //得到此次接收到的数据长度
-            printf("usart2 收到长度：%d\r\n",len);
-            USART2_RX_BUF[len]='\0';
+            len = USART2_RX_STA & 0x3fff;                   //得到此次接收到的数据长度
+            printf("收到长度：%d\r\n", len);
+            USART2_RX_BUF[len] = '\0';
             //printf("usart2 收到数据：%s\r\n",USART2_RX_BUF);
             processMessage((char*)USART2_RX_BUF);
             USART2_RX_STA = 0;
+        }
+        //printf("bmp3play\r\n");
+        if(bMp3Play == 1)continue;
+        if (millis() - lastWakeTime > 11000 && lastWakeTime != 0 )
+        {
+            waked = 0;
+            lastWakeTime = 0;
+            Stop_ASR();
         }
         switch(nAsrStatus)
         {
@@ -179,11 +264,12 @@ int main(void)
             break;
 
         case LD_ASR_ERROR:
+            printf("LD3320芯片内部出现不正确。\r\n");
             break;
 
         case LD_ASR_NONE:
             nAsrStatus = LD_ASR_RUNING;            //启动一次ASR识别流程：ASR初始化，ASR添加关键词语，启动ASR运算
-            if (RunASR() == 0)
+            if (RunASR(0xff, "asr.txt") == 0)
             {
                 printf("ASR_ERROR\r\n");
                 nAsrStatus = LD_ASR_ERROR;
@@ -192,43 +278,35 @@ int main(void)
 
         case LD_ASR_FOUNDOK:
             nAsrRes = LD_ReadReg(0xc5);	            //一次ASR识别成功结束，取ASR识别结果
-            switch(nAsrRes)
+            voice_command(nAsrRes,"config.txt");
+            if(nAsrRes == 1)
             {
-            case CODE_CQXT:
+                waked = 1;
+                lastWakeTime = millis();
                 printf("接收到口令：重启系统\r\n");
-                PlayDemoSound_mp3("重启.mp3");   //播放文件
-                while(bMp3Play == 0);            //语音数据发送完毕
-                delay_ms(3000); 				 //本段语音3s，延时4S，确保语音播放完毕
-                NVIC_SystemReset();              //重启
-                break;
-            case CODE_JGXH:
-                printf("接收到口令：讲个笑话\r\n");
-                PlayDemoSound_mp3("笑话.mp3");   //播放文件
-                while(bMp3Play == 0);            //语音数据发送完毕
-                delay_ms(12000); 				 //本段语音10s，延时12S，确保语音播放完毕
-                break;
-            case CODE_DK:
-                printf("接收到口令：打开\r\n");
-                PlayDemoSound_mp3("打开.mp3");       //播放文件
-                while(bMp3Play == 0);                //语音数据发送完毕
-                delay_ms(5000);                      //本段语音4s，延时5S，确保语音播放完毕
-                delay_ms(1000);                      //语音中提示是1s延时后，打开LED
-                LED_D3 = 0;
-                LED_D4 = 0;
-                break;
-            case CODE_GB:
-                printf("接收到口令：关闭\r\n");
-                PlayDemoSound_mp3("关闭.mp3");       //播放文件
-                while(bMp3Play == 0);                //语音数据发送完毕
-                delay_ms(5000);                      //本段语音4s，延时5S，确保语音播放完毕
-                delay_ms(1000);                      //语音中提示是1s延时后，关闭LED
-                LED_D3 = 1;
-                LED_D4 = 1;
-                break;
-            default:
-                printf("不在口令集之内\r\n");
+                nAsrStatus = LD_ASR_NONE;
                 break;
             }
+            if(waked != 1)
+            {
+                printf("未唤醒。\r\n");
+                nAsrStatus = LD_ASR_NONE;
+                break;
+            }
+            if(nAsrRes == 2)
+            {
+                printf("接收到口令：讲个笑话\r\n");
+            }
+            if(nAsrRes == 3)
+            {
+                printf("接收到口令：打开\r\n");
+            }
+            if(nAsrRes == 4)
+            {
+                printf("接收到口令：关闭\r\n");
+            }
+            
+            printf("不在口令集之内\r\n");
             nAsrStatus = LD_ASR_NONE;
             break;
 

@@ -6,19 +6,19 @@ void MILLIS_Init(void)
 #ifdef USE_LSE
     NVIC_InitTypeDef NVIC_InitStructure;
     /* Enable PWR and BKP clocks */
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP, ENABLE); //?????????????
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP, ENABLE); //使能电源时钟和备份区域时钟
 
     /* Allow access to BKP Domain */
-    PWR_BackupAccessCmd(ENABLE);     //????????
+    PWR_BackupAccessCmd(ENABLE);     //取消备份区写保护
 
     /* Reset Backup Domain */
 
-    if(PWR_GetFlagStatus(PWR_FLAG_WU) == SET)   //???????
+    if(PWR_GetFlagStatus(PWR_FLAG_WU) == SET)   //判断是否被唤醒
     {
-        PWR_ClearFlag(PWR_FLAG_WU); // ??????
+        PWR_ClearFlag(PWR_FLAG_WU); //清除唤醒标志
     } else
     {
-        BKP_DeInit();    //??????
+        BKP_DeInit();    //复位备份区域
     }
 
     /* Enable LSE */
@@ -61,23 +61,23 @@ void MILLIS_Init(void)
 #else
     NVIC_InitTypeDef NVIC_InitStructure;
     EXTI_InitTypeDef EXTI_InitStructure;
-    //??????
+    //中断时钟使能
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
 
 
 
 
 
-    //???????
+    //中断优先级配置
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
-    //??RTC????
+    //设置RTC闹钟中断
     NVIC_InitStructure.NVIC_IRQChannel = RTCAlarm_IRQn;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
 
-    //???????17?????
+    //闹钟中断接到第17线外部中断
     EXTI_ClearITPendingBit(EXTI_Line17);
     EXTI_InitStructure.EXTI_Line = EXTI_Line17;
     EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
@@ -87,20 +87,20 @@ void MILLIS_Init(void)
 
     //PWR_WakeUpPinCmd(DISABLE);
 
-    //??????????
+    //电源管理部分时钟开启
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP, ENABLE);
-    //?????????
+    //使能后备寄存器访问
     PWR_BackupAccessCmd(ENABLE);
 
 
     /* Reset Backup Domain */
 
-    if(PWR_GetFlagStatus(PWR_FLAG_WU) == SET)   //???????
+    if(PWR_GetFlagStatus(PWR_FLAG_WU) == SET)   //判断是否被唤醒
     {
-        PWR_ClearFlag(PWR_FLAG_WU); // ??????
+        PWR_ClearFlag(PWR_FLAG_WU); // 清除唤醒标志
     } else
     {
-        BKP_DeInit();    //??????
+        BKP_DeInit();    //复位备份区域
     }
 
     //BKP_ClearFlag();

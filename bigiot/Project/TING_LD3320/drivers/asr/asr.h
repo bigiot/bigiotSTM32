@@ -11,18 +11,9 @@
 extern u8 nAsrStatus;
 extern u8 ucRegVal;
 
-/*----------------------------------------*/
-/*             关键词识别码               */
-/*           根据需要自行修改             */
-/*----------------------------------------*/
 
-#define CODE_CQXT	1	 //重启系统
-#define CODE_JGXH	2	 //讲个笑话
-#define CODE_DK	    3	 //打开
-#define CODE_GB	    4	 //关闭
-
-#define DATE_A 4         //几个关键词
-#define DATE_B 20		 //关键词的大小
+#define DATE_A 50         //几个关键词
+#define DATE_B 80		 //关键词的大小
 
 
 //以下五个状态定义用来记录程序是在运行ASR识别过程中的哪个状态
@@ -35,12 +26,13 @@ extern u8 ucRegVal;
 //MIC设置
 #define MIC_VOL 0X4c
 
-u8 RunASR(void);
-void LD_Init_ASR(void);
+u8 RunASR(u8 b8, char* path);
+void LD_Init_ASR(u8 b8);
 u8 LD_Check_ASRBusyFlag_b2(void);
 u8 LD_AsrRun(void);
 u8 LD_GetResult(void);
-u8 LD_AsrAddFixed(void);
+u8 LD_AsrAddFixed(char* path);
 void ProcessInt_ASR(void);
+void Stop_ASR(void);
 
 #endif
