@@ -49,6 +49,14 @@ void USART1_init(u32 bound)
     USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);//开启中断
     USART_Cmd(USART1, ENABLE);                    //使能串口 
 }
+
+/*发送一个字节数据*/
+void UART1SendByte(unsigned char SendData)
+{
+    USART_SendData(USART1, SendData);
+    while(USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET);
+}
+
 /*-------------------------------------------------*/
 /*函数名：串口1中断服务函数                        */
 /*参  数：无                                       */

@@ -30,8 +30,6 @@
 FATFS fs;
 //FIL config_file2;
 
-//char buf[2048];
-
 unsigned long lastCheckStatusTime = 0;
 unsigned long lastCheckOutTime = 0;
 unsigned long lastSayTime = 0;
@@ -176,7 +174,7 @@ u8 write_file2(char *path)
 
 void voice_command(u8 num,char * path)
 {
-    FIL file;
+    FIL config_file2;
     UINT br;
     u8 res;
     char config_buf[2048];
@@ -184,32 +182,48 @@ void voice_command(u8 num,char * path)
     cJSON *C_n;
     cJSON *C_n_m;
     char *c_n_str;
-    res=f_open(&file,path,FA_OPEN_EXISTING | FA_READ );    //打开一个mp3文件
+    res=f_open(&config_file2,path,FA_OPEN_EXISTING | FA_READ );    //打开一个mp3文件
 	if(res != FR_OK)                                           //如果不存在
 	{
 		printf("2该文件不存在:%d\r\n",res);                            //串口显示信息
-		f_close(&file);                                    //关闭文件
+		f_close(&config_file2);                                    //关闭文件
 		return;		                                       //返回错误值
         //TODO...
 	}
-    f_read (&file, config_buf,f_size(&file),&br);			//读取文件到buf
-    f_close(&file);	
+    f_read (&config_file2, config_buf,f_size(&config_file2),&br);			//读取文件到buf
+    f_close(&config_file2);	
     printf("file:%s\r\n",config_buf);
+    
     root = cJSON_Parse(config_buf);
+    if(!root)return;
     //printf("%s\r\n", cJSON_Print(root));
     sprintf(c_n_str,"%s%d","C",num);
-    printf("c_n_str:%s\r\n",c_n_str);
-    C_n = cJSON_GetObjectItem(root, "C1");
+    //printf("c_n_str:%s\r\n",c_n_str);
+    C_n = cJSON_GetObjectItem(root, c_n_str);
+    if(!C_n)goto _return;
     C_n_m = cJSON_GetObjectItem(C_n, "M");
-    printf("c_n_m:%s\r\n",C_n_m->valuestring);
+    if(!C_n_m)goto _return;
+    //printf("c_n_m:%s\r\n",C_n_m->valuestring);
+    
+    /*唤醒命令*/
     if(strncmp(C_n_m->valuestring, "WAKE", 4) == 0)
     {
         printf("waked\r\n");
+        waked = 1;
+        lastWakeTime = millis();
+        PlayDemoSound_mp3("welcome.mp3");   //播放文件 
+        goto _return;
     }
+    
+    /*未唤醒返回不执行*/
+    if(waked != 1)
+        goto _return;
+    
     if(strncmp(C_n_m->valuestring, "LED", 3) == 0)
     {
         printf("LEDed\r\n");
     }
+    _return:
     if(root)cJSON_Delete(root);
     return;
 }
@@ -218,8 +232,8 @@ int main(void)
     u8 nAsrRes = 0;
     u16 len;
     setup();
-    write_file("asr.txt");
-    write_file2("config.txt");
+    //write_file("asr.txt");
+    //write_file2("config.txt");
     //read_wakeup_file("0:/message.txt");
     printf(" 口令1：重启系统\r\n ");
     printf(" 口令2：讲个笑话\r\n ");
@@ -278,36 +292,8 @@ int main(void)
 
         case LD_ASR_FOUNDOK:
             nAsrRes = LD_ReadReg(0xc5);	            //一次ASR识别成功结束，取ASR识别结果
-            voice_command(nAsrRes,"config.txt");
-            if(nAsrRes == 1)
-            {
-                waked = 1;
-                lastWakeTime = millis();
-                printf("接收到口令：重启系统\r\n");
-                nAsrStatus = LD_ASR_NONE;
-                break;
-            }
-            if(waked != 1)
-            {
-                printf("未唤醒。\r\n");
-                nAsrStatus = LD_ASR_NONE;
-                break;
-            }
-            if(nAsrRes == 2)
-            {
-                printf("接收到口令：讲个笑话\r\n");
-            }
-            if(nAsrRes == 3)
-            {
-                printf("接收到口令：打开\r\n");
-            }
-            if(nAsrRes == 4)
-            {
-                printf("接收到口令：关闭\r\n");
-            }
-            
-            printf("不在口令集之内\r\n");
-            nAsrStatus = LD_ASR_NONE;
+            voice_command(nAsrRes,"config.txt");    //处理识别结果
+            nAsrStatus = LD_ASR_NONE;               //恢复未识别状态
             break;
 
         case LD_ASR_FOUNDZERO:

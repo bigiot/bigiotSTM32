@@ -186,8 +186,8 @@ u8 LD_AsrAddFixed(char* path)
             sRecog[i][j] = c[j];
         }
         sRecog[i][j] = NULL;
-        printf("%d->", N->valueint);
-        printf("%s\r\n", c);
+        //printf("%d->", N->valueint);
+        //printf("%s\r\n", c);
     }
     pCode[i]=NULL;
     if(root)cJSON_Delete(root);

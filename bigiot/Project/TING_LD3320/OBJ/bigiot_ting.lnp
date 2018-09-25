@@ -6,6 +6,7 @@
 "..\obj\cjson.o"
 "..\obj\bigiot.o"
 "..\obj\millis.o"
+"..\obj\spk_1.o"
 "..\obj\stm32f10x_rcc.o"
 "..\obj\stm32f10x_gpio.o"
 "..\obj\misc.o"
@@ -43,6 +44,7 @@
 "..\obj\led.o"
 "..\obj\usart1.o"
 "..\obj\usart2.o"
+"..\obj\spk_1.o"
 --library_type=microlib --strict --scatter "..\OBJ\bigiot_ting.sct"
 --summary_stderr --info summarysizes --map --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers
